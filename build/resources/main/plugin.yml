@@ -1,0 +1,5 @@
+name: CrossRaid
+version: '1.0-SNAPSHOT'
+main: mark.tofu.crossRaid.CrossRaid
+api-version: '1.21'
+authors: [ akira ]
