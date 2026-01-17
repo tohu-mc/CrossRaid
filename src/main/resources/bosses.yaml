@@ -1,0 +1,15 @@
+# ボス設定ファイル
+boss_001:
+  name: "§c深淵のスケルトン"
+  drop_gold: 150
+  drop_exp: 80
+
+boss_002:
+  name: "§6狂暴なオーク"
+  drop_gold: 300
+  drop_exp: 200
+
+boss_003:
+  name: "§4古のドラゴン"
+  drop_gold: 5000
+  drop_exp: 1500

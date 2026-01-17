@@ -3,6 +3,8 @@
   <component name="ProjectModuleManager">
     <modules>
       <module fileurl="file://$PROJECT_DIR$/.idea/modules/CrossRaid.main.iml" filepath="$PROJECT_DIR$/.idea/modules/CrossRaid.main.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/modules/IdeaProjects.CrossRaid.main.iml" filepath="$PROJECT_DIR$/.idea/modules/IdeaProjects.CrossRaid.main.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/modules/mark.tofu.CrossRaid.main.iml" filepath="$PROJECT_DIR$/.idea/modules/mark.tofu.CrossRaid.main.iml" />
     </modules>
   </component>
 </project>
