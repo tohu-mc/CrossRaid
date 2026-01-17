@@ -1,6 +1,7 @@
 package mark.tofu.crossRaid;
 
-import mark.tofu.crossRaid.bosses.BossDataManager;
+import mark.tofu.crossRaid.bosses.BossDeathListener;
+import mark.tofu.crossRaid.bosses.BossManager;
 import mark.tofu.crossRaid.commands.RaidCommand;
 import mark.tofu.crossRaid.players.PlayerDataManager;
 import mark.tofu.crossRaid.raids.RaidListener;
@@ -14,7 +15,7 @@ public final class CrossRaid extends JavaPlugin {
 
     private static CrossRaid instance;
     public PlayerDataManager playerDataManager;
-    public BossDataManager bossDataManager;
+    private BossManager bossManager;
     private ShopManager shopManager;
     private RaidManager raidManager;
     public static World CROSS_RAID_WORLD;
@@ -26,7 +27,7 @@ public final class CrossRaid extends JavaPlugin {
         saveDefaultConfig();
         CROSS_RAID_WORLD = Bukkit.getWorld("CrossRaid");
         playerDataManager = new PlayerDataManager(this);
-        bossDataManager = new BossDataManager(this);
+        this.bossManager = new BossManager(this);
         this.raidManager = new RaidManager(this);
 
         // 2. コマンド登録
@@ -36,8 +37,8 @@ public final class CrossRaid extends JavaPlugin {
 
         // 3. リスナー登録
         getServer().getPluginManager().registerEvents(new RaidListener(raidManager), this);
+        getServer().getPluginManager().registerEvents(new BossDeathListener(this, bossManager), this);
         this.shopManager = new ShopManager(this);
-        bossDataManager.loadBosses();
     }
 
     @Override

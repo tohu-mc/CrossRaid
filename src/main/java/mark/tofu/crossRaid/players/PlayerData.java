@@ -40,5 +40,11 @@ public class PlayerData {
     public void setLevel(int level) { this.level = level; }
     public long getGold() { return gold; }
     public void setGold(long gold) { this.gold = gold; }
+    public void addGold(long gold) {
+        this.gold = this.gold + gold;
+    }
+    public void addExp(double exp) {
+        this.exp = this.exp + exp;
+    }
 
 }

@@ -1,0 +1,31 @@
+# shop.yml
+shop-title: "§0§lRaid Shop"
+npc-name: "Shopkeeper"  # この名前のEntityを右クリックすると開く
+
+items:
+  health_potion:
+    material: POTION
+    name: "§c回復のポーション"
+    lore:
+      - "§7HPを即座に回復する"
+      - "§e価格: 100G"
+    price: 100
+    slot: 11
+
+  diamond_sword:
+    material: DIAMOND_SWORD
+    name: "§bレイドスレイヤー"
+    lore:
+      - "§7ボス特攻の剣"
+      - "§e価格: 5000G"
+    price: 5000
+    slot: 13
+
+  teleport_scroll:
+    material: PAPER
+    name: "§a帰還のスクロール"
+    lore:
+      - "§7ロビーに戻る"
+      - "§e価格: 50G"
+    price: 50
+    slot: 15

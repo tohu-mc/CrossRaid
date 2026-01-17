@@ -1,21 +1,20 @@
 package mark.tofu.crossRaid.bosses;
 
 public class BossData {
-    private final String id;
-    private final String name;
-    private final long dropGold;
-    private final int dropExp;
+    private final String mythicMobId;
+    private final String displayName;
+    private final long rewardGold;
+    private final double rewardExp;
 
-    public BossData(String id, String name, long dropGold, int dropExp) {
-        this.id = id;
-        this.name = name;
-        this.dropGold = dropGold;
-        this.dropExp = dropExp;
+    public BossData(String mythicMobId, String displayName, long rewardGold, double rewardExp) {
+        this.mythicMobId = mythicMobId;
+        this.displayName = displayName;
+        this.rewardGold = rewardGold;
+        this.rewardExp = rewardExp;
     }
 
-    // ゲッター
-    public String getId() { return id; }
-    public String getName() { return name; }
-    public long getDropGold() { return dropGold; }
-    public int getDropExp() { return dropExp; }
+    public String getMythicMobId() { return mythicMobId; }
+    public String getDisplayName() { return displayName; }
+    public long getRewardGold() { return rewardGold; }
+    public double getRewardExp() { return rewardExp; }
 }
