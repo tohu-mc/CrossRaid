@@ -1,5 +1,6 @@
 package mark.tofu.crossRaid.raids;
 
+
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 import java.util.HashSet;
@@ -7,25 +8,22 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
+/**
+ * 1つのレイド挑戦（パーティ）の状態を管理するクラス
+ */
 public class RaidSession {
-    // 参加しているメンバー全員のUUID
-    private final Set<UUID> members = new HashSet<>();
-    private final UUID leaderUuid; // リーダー（管理用）
+    private final Set<UUID> members; // 参加メンバー
+    private int currentStageIndex;   // 現在の階層 (1, 2, ...)
+    private UUID currentBossUuid;    // 戦闘中のボスEntityのUUID
 
-    private int currentLevel;
-    private UUID currentBossUuid;
-
-    public RaidSession(UUID leaderUuid, Set<UUID> initialMembers) {
-        this.leaderUuid = leaderUuid;
-        this.members.addAll(initialMembers);
-        this.currentLevel = 1;
+    public RaidSession(Set<UUID> members) {
+        this.members = new HashSet<>(members);
+        this.currentStageIndex = 1;
     }
 
-    public Set<UUID> getMembers() {
-        return members;
-    }
+    // メンバー管理
+    public Set<UUID> getMemberIds() { return members; }
 
-    // 生存している（オンラインの）メンバーを取得するヘルパー
     public Set<Player> getOnlinePlayers() {
         return members.stream()
                 .map(Bukkit::getPlayer)
@@ -33,17 +31,14 @@ public class RaidSession {
                 .collect(Collectors.toSet());
     }
 
-    public void removeMember(UUID uuid) {
-        members.remove(uuid);
-    }
+    public void removeMember(UUID uuid) { members.remove(uuid); }
+    public boolean isEmpty() { return members.isEmpty(); }
 
-    public boolean isEmpty() {
-        return members.isEmpty();
-    }
+    // 進行状況管理
+    public int getCurrentStageIndex() { return currentStageIndex; }
+    public void advanceStage() { this.currentStageIndex++; }
 
-    public int getCurrentLevel() { return currentLevel; }
-    public void nextLevel() { this.currentLevel++; }
-
+    // ボス管理
     public UUID getCurrentBossUuid() { return currentBossUuid; }
-    public void setCurrentBossUuid(UUID currentBossUuid) { this.currentBossUuid = currentBossUuid; }
+    public void setCurrentBossUuid(UUID uuid) { this.currentBossUuid = uuid; }
 }

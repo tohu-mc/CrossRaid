@@ -3,32 +3,25 @@ package mark.tofu.crossRaid.raids;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.entity.EntityDeathEvent;
-import org.bukkit.event.entity.PlayerDeathEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 
 public class RaidListener implements Listener {
 
-    private final RaidManager manager;
+    private final RaidManager raidManager;
 
-    public RaidListener(RaidManager manager) {
-        this.manager = manager;
+    public RaidListener(RaidManager raidManager) {
+        this.raidManager = raidManager;
     }
 
     @EventHandler
     public void onMobDeath(EntityDeathEvent e) {
-        manager.onBossDeath(e.getEntity());
+        // 全てのEntity死亡をマネージャーに通知し、レイドボスか判定させる
+        raidManager.handleBossDeath(e.getEntity());
     }
 
     @EventHandler
-    public void onPlayerQuit(PlayerQuitEvent e) {
-        // ログアウトしたらパーティ/レイドから抜ける
-        manager.removePlayer(e.getPlayer().getUniqueId());
-    }
-
-    @EventHandler
-    public void onPlayerDeath(PlayerDeathEvent e) {
-        // 死んだらレイドから抜ける扱いにする（または観戦モードにする等の拡張が可能）
-        manager.removePlayer(e.getEntity().getUniqueId());
-        e.getEntity().sendMessage("§cレイドから脱落しました。");
+    public void onQuit(PlayerQuitEvent e) {
+        // 途中抜け処理
+        raidManager.quitPlayer(e.getPlayer().getUniqueId());
     }
 }

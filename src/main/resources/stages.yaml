@@ -1,0 +1,17 @@
+# stages.yml
+settings:
+  next-stage-delay: 60  # ボス撃破から次の部屋への移動待機時間 (Ticks)
+
+stages:
+  1:
+    display-name: "§c第一階層: 地下墓地"
+    player-spawn: "world, 100.5, 64, 100.5"   # プレイヤー転送先
+    boss-spawn: "world, 100.5, 64, 110.5"     # ボス出現位置
+    mythic-mob-id: "SkeletalKnight"           # MythicMobsのInternalName
+    reward-gold: 100                          # クリア時の報酬
+  2:
+    display-name: "§c第二階層: 灼熱の間"
+    player-spawn: "world, 200.5, 64, 200.5"
+    boss-spawn: "world, 200.5, 64, 210.5"
+    mythic-mob-id: "StiffenedRedAnt"
+    reward-gold: 200

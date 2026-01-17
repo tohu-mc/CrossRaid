@@ -6,244 +6,205 @@ import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.World;
 import org.bukkit.configuration.ConfigurationSection;
+import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
 import org.bukkit.scheduler.BukkitRunnable;
 
+import java.io.File;
 import java.util.*;
 
 public class RaidManager {
 
     private final CrossRaid plugin;
 
-    // プレイ中のセッション管理 (プレイヤーUUID -> セッションインスタンス)
-    // 複数のプレイヤーが「同じセッションインスタンス」を参照します
+    // 進行中のセッション (PlayerUUID -> Session)
     private final Map<UUID, RaidSession> activeSessions = new HashMap<>();
 
-    // ステージデータキャッシュ
-    private final Map<Integer, StageData> stages = new HashMap<>();
+    // ステージデータキャッシュ (階層番号 -> データ)
+    private final Map<Integer, StageInfo> stageData = new HashMap<>();
 
-    // --- 簡易パーティ管理用 ---
-    // リーダーUUID -> メンバーリスト(リーダー含む)
-    private final Map<UUID, Set<UUID>> lobbies = new HashMap<>();
-    // 招待されている人 -> 招待してくれたリーダー
-    private final Map<UUID, UUID> invites = new HashMap<>();
+    private long nextStageDelay = 60L;
 
     public RaidManager(CrossRaid plugin) {
         this.plugin = plugin;
-        loadConfig();
+        loadStages();
     }
 
-    public void loadConfig() {
-        stages.clear();
-        ConfigurationSection section = plugin.getConfig().getConfigurationSection("levels");
-        if (section == null) return;
-        for (String key : section.getKeys(false)) {
-            try {
-                int level = Integer.parseInt(key);
-                String spawnStr = section.getString(key + ".spawn-loc");
-                String bossLocStr = section.getString(key + ".boss-loc");
-                String mobName = section.getString(key + ".mythic-mob");
-                stages.put(level, new StageData(parseLoc(spawnStr), parseLoc(bossLocStr), mobName));
-            } catch (Exception e) {
-                plugin.getLogger().warning("Level " + key + " Error: " + e.getMessage());
+    // --- 設定読み込み ---
+    public void loadStages() {
+        stageData.clear();
+        File file = new File(plugin.getDataFolder(), "stages.yml");
+        if (!file.exists()) plugin.saveResource("stages.yml", false);
+
+        YamlConfiguration config = YamlConfiguration.loadConfiguration(file);
+        this.nextStageDelay = config.getLong("settings.next-stage-delay", 60L);
+
+        ConfigurationSection sec = config.getConfigurationSection("stages");
+        if (sec != null) {
+            for (String key : sec.getKeys(false)) {
+                try {
+                    int id = Integer.parseInt(key);
+                    stageData.put(id, new StageInfo(
+                            sec.getString(key + ".display-name"),
+                            parseLocation(sec.getString(key + ".player-spawn")),
+                            parseLocation(sec.getString(key + ".boss-spawn")),
+                            sec.getString(key + ".mythic-mob-id"),
+                            sec.getInt(key + ".reward-gold")
+                    ));
+                } catch (Exception e) {
+                    plugin.getLogger().warning("ステージ設定エラー: " + key + " - " + e.getMessage());
+                }
             }
         }
+        plugin.getLogger().info("ロード完了: " + stageData.size() + " ステージ");
     }
 
-    // --- パーティ機能 ---
+    // --- ゲーム進行 ---
 
-    // 招待を送る
-    public void invitePlayer(Player leader, Player target) {
-        if (activeSessions.containsKey(leader.getUniqueId()) || activeSessions.containsKey(target.getUniqueId())) {
-            leader.sendMessage("§c現在レイド中のプレイヤーは招待できません。");
-            return;
-        }
-
-        // ロビー作成（まだなければ）
-        lobbies.putIfAbsent(leader.getUniqueId(), new HashSet<>(Collections.singletonList(leader.getUniqueId())));
-
-        invites.put(target.getUniqueId(), leader.getUniqueId());
-        target.sendMessage("§e" + leader.getName() + " からレイドの招待が届きました。 §a/raidspire join §eで参加します。");
-        leader.sendMessage("§a" + target.getName() + " に招待を送りました。");
-    }
-
-    // 招待を受ける
-    public void joinParty(Player player) {
-        if (!invites.containsKey(player.getUniqueId())) {
-            player.sendMessage("§c招待されていません。");
-            return;
-        }
-        UUID leaderId = invites.remove(player.getUniqueId());
-        Set<UUID> party = lobbies.get(leaderId);
-
-        if (party == null) {
-            player.sendMessage("§cパーティは解散されました。");
-            return;
-        }
-
-        party.add(player.getUniqueId());
-        player.sendMessage("§aパーティに参加しました！");
-        Player leader = Bukkit.getPlayer(leaderId);
-        if (leader != null) leader.sendMessage("§a" + player.getName() + " がパーティに参加しました。");
-    }
-
-    // --- レイド進行 ---
-
-    // 開始（リーダーが実行）
+    // レイド開始
     public void startRaid(Player leader) {
-        Set<UUID> members = lobbies.getOrDefault(leader.getUniqueId(), new HashSet<>(Collections.singletonList(leader.getUniqueId())));
-
-        // 全員がレイド中でないか確認
-        for (UUID uid : members) {
-            if (activeSessions.containsKey(uid)) {
-                leader.sendMessage("§cメンバーの中に既にレイド中の人がいます。");
-                return;
-            }
+        if (activeSessions.containsKey(leader.getUniqueId())) {
+            leader.sendMessage("§c既にレイドに参加しています。");
+            return;
         }
 
-        // セッション作成
-        RaidSession session = new RaidSession(leader.getUniqueId(), members);
+        // ここではソロ開始ですが、パーティ機能があるならメンバー全員をSetに入れます
+        Set<UUID> members = new HashSet<>();
+        members.add(leader.getUniqueId());
 
-        // マップに登録（全員が同じセッションを参照するように）
-        for (UUID uid : members) {
-            activeSessions.put(uid, session);
-            invites.remove(uid); // 招待情報クリア
-        }
-        lobbies.remove(leader.getUniqueId()); // ロビークリア
+        RaidSession session = new RaidSession(members);
+        for (UUID uid : members) activeSessions.put(uid, session);
 
-        // 最初の処理へ
-        broadcast(session, "§aレイドバトルを開始します！ 参加人数: " + members.size() + "人");
-        processStage(session);
+        leader.sendMessage("§aレイドを開始します！");
+        playStage(session);
     }
 
-    // ステージ処理（転送＆召喚）
-    private void processStage(RaidSession session) {
-        int level = session.getCurrentLevel();
-        StageData data = stages.get(level);
+    // 階層のセットアップ
+    private void playStage(RaidSession session) {
+        int stageIdx = session.getCurrentStageIndex();
+        StageInfo info = stageData.get(stageIdx);
 
-        // クリア判定
-        if (data == null) {
+        // 次のステージがない ＝ 全クリ
+        if (info == null) {
             completeRaid(session);
             return;
         }
 
-        // 1. 全員テレポート
-        Set<Player> onlinePlayers = session.getOnlinePlayers();
-        if (onlinePlayers.isEmpty()) {
-            endSession(session); // 全員落ちてたら終了
-            return;
+        // 1. プレイヤー転送
+        for (Player p : session.getOnlinePlayers()) {
+            p.teleport(info.playerSpawn);
+            p.sendMessage(info.displayName + " §eへ移動しました。");
+            p.sendTitle(info.displayName, "§7Boss Approaching...", 10, 60, 20);
         }
 
-        for (Player p : onlinePlayers) {
-            p.teleport(data.playerSpawn);
-            p.sendMessage("§e§l[LEVEL " + level + "] §rボス部屋に入場しました！");
-        }
-
-        // 2. ボス召喚
+        // 2. MythicMobs召喚
         try {
-            Entity boss = MythicBukkit.inst().getAPIHelper().spawnMythicMob(data.mobName, data.bossSpawn);
+            Entity boss = MythicBukkit.inst().getAPIHelper().spawnMythicMob(info.mythicMobId, info.bossSpawn);
             if (boss != null) {
                 session.setCurrentBossUuid(boss.getUniqueId());
             } else {
-                broadcast(session, "§cボスの召喚に失敗しました。管理者に連絡してください。");
+                broadcast(session, "§cボス召喚エラー: MobIDを確認してください (" + info.mythicMobId + ")");
             }
         } catch (Exception e) {
             e.printStackTrace();
+            broadcast(session, "§c内部エラーによりボスを召喚できませんでした。");
         }
     }
 
-    // ボス討伐検知
-    public void onBossDeath(Entity entity) {
-        UUID deadId = entity.getUniqueId();
+    // ボス死亡検知（Listenerから呼ばれる）
+    public void handleBossDeath(Entity deadEntity) {
+        UUID deadId = deadEntity.getUniqueId();
 
-        // どのセッションのボスか探す
-        // (values()で回すと重複するので注意が必要だが、breakすればOK)
+        // このボスと戦っているセッションを探す
         RaidSession targetSession = null;
-        for (RaidSession s : activeSessions.values()) {
-            if (deadId.equals(s.getCurrentBossUuid())) {
-                targetSession = s;
+        for (RaidSession session : activeSessions.values()) {
+            if (deadId.equals(session.getCurrentBossUuid())) {
+                targetSession = session;
                 break;
             }
         }
 
         if (targetSession != null) {
-            broadcast(targetSession, "§bボス撃破！ 次の階層へ進みます...");
-            targetSession.nextLevel();
-            targetSession.setCurrentBossUuid(null);
-
-            final RaidSession finalSession = targetSession;
-            long delay = plugin.getConfig().getLong("settings.next-room-delay", 60L);
-
-            new BukkitRunnable() {
-                @Override
-                public void run() {
-                    // まだセッションが有効なら次へ
-                    if (!finalSession.isEmpty()) {
-                        processStage(finalSession);
-                    }
-                }
-            }.runTaskLater(plugin, delay);
+            processStageClear(targetSession);
         }
     }
 
+    // ステージクリア処理
+    private void processStageClear(RaidSession session) {
+        StageInfo info = stageData.get(session.getCurrentStageIndex());
+
+        // 報酬配布 (既存のPlayerDataシステムを使う想定)
+        for (Player p : session.getOnlinePlayers()) {
+            // plugin.getPlayerDataManager().addGold(p.getUniqueId(), info.rewardGold);
+            p.sendMessage("§eステージクリア！ §6+" + info.rewardGold + "G");
+        }
+
+        // 次へ進む
+        session.advanceStage();
+        session.setCurrentBossUuid(null); // ボスIDリセット
+
+        // 遅延して次の部屋へ
+        final RaidSession finalSession = session;
+        new BukkitRunnable() {
+            @Override
+            public void run() {
+                if (!finalSession.isEmpty()) {
+                    playStage(finalSession);
+                }
+            }
+        }.runTaskLater(plugin, nextStageDelay);
+    }
+
+    // 全クリ処理
     private void completeRaid(RaidSession session) {
-        broadcast(session, "§6§lCONGRATULATIONS! §rレイド完全制覇！");
-        // 報酬処理など...
+        broadcast(session, "§6§lCONGRATULATIONS! §r全てのステージを攻略しました！");
         endSession(session);
     }
 
-    // セッション終了（解散）
+    // 強制終了・解散
     public void endSession(RaidSession session) {
-        for (UUID uid : session.getMembers()) {
+        for (UUID uid : session.getMemberIds()) {
             activeSessions.remove(uid);
-        }
-    }
-
-    // プレイヤー単体の離脱処理
-    public void removePlayer(UUID uuid) {
-        RaidSession session = activeSessions.get(uuid);
-        if (session != null) {
-            session.removeMember(uuid);
-            activeSessions.remove(uuid);
-
-            if (session.isEmpty()) {
-                // 全員いなくなったらボスを消す等の処理が必要ならここに記述
-            } else {
-                broadcast(session, "§e仲間が1人脱落しました。残り人数で続行します。");
+            Player p = Bukkit.getPlayer(uid);
+            if (p != null) {
+                p.teleport(Bukkit.getWorlds().get(0).getSpawnLocation()); // ロビーへ戻す
             }
         }
-        // ロビーからも削除
-        lobbies.values().forEach(set -> set.remove(uuid));
-        invites.remove(uuid);
     }
 
-    // セッション内メンバー全員へメッセージ
-    private void broadcast(RaidSession session, String msg) {
-        for (Player p : session.getOnlinePlayers()) {
-            p.sendMessage(msg);
+    public void quitPlayer(UUID uuid) {
+        if (activeSessions.containsKey(uuid)) {
+            activeSessions.remove(uuid);
+            // ※必要に応じてセッション自体の解散や、残ったメンバーへの通知を入れる
         }
     }
 
-    public void endAllSessions() {
-        activeSessions.clear();
+    // --- Utils ---
+    private void broadcast(RaidSession session, String msg) {
+        session.getOnlinePlayers().forEach(p -> p.sendMessage(msg));
     }
 
-    private Location parseLoc(String str) {
+    private Location parseLocation(String str) {
         if (str == null) return null;
-        String[] parts = str.split(",");
-        if (parts.length < 4) return null;
-        World w = Bukkit.getWorld(parts[0].trim());
-        double x = Double.parseDouble(parts[1].trim());
-        double y = Double.parseDouble(parts[2].trim());
-        double z = Double.parseDouble(parts[3].trim());
+        String[] part = str.split(",");
+        World w = Bukkit.getWorld(part[0].trim());
+        double x = Double.parseDouble(part[1].trim());
+        double y = Double.parseDouble(part[2].trim());
+        double z = Double.parseDouble(part[3].trim());
         return new Location(w, x, y, z);
     }
 
-    private static class StageData {
+    // データ保持用インナークラス
+    private static class StageInfo {
+        final String displayName;
         final Location playerSpawn;
         final Location bossSpawn;
-        final String mobName;
-        StageData(Location p, Location b, String m) { this.playerSpawn = p; this.bossSpawn = b; this.mobName = m; }
+        final String mythicMobId;
+        final int rewardGold;
+
+        public StageInfo(String d, Location p, Location b, String m, int r) {
+            this.displayName = d; this.playerSpawn = p; this.bossSpawn = b; this.mythicMobId = m; this.rewardGold = r;
+        }
     }
 }
